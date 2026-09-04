@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Dropzone } from '../components/Dropzone';
 import { Header } from '../components/Header';
-import { createBoard } from '../services/boardService';
+import { createBoard, syncAllLocalBoards } from '../services/boardService';
 import { MessageSquare, Share2, Layers, CheckCircle2 } from 'lucide-react';
-import { Board } from '../types';
+import { Board } from '../types/index';
 
 export const HomePage: React.FC = () => {
   const navigate = useNavigate();
@@ -12,6 +12,9 @@ export const HomePage: React.FC = () => {
   const [recentBoards, setRecentBoards] = useState<Board[]>([]);
 
   useEffect(() => {
+    // Sincroniza boards locais para o Supabase caso tenham sido criados antes da chave
+    syncAllLocalBoards();
+
     try {
       const raw = localStorage.getItem('pastel_local_boards');
       if (raw) {

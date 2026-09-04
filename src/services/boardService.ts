@@ -113,16 +113,75 @@ export async function getBoard(id: string): Promise<Board | null> {
       .eq('id', id)
       .single();
 
-    if (error) {
-      console.warn('Board não encontrado no Supabase, verificando local:', error.message);
-    } else if (data) {
+    if (!error && data) {
       return data as Board;
     }
   }
 
   // Fallback LocalStorage
   const boards = getLocalBoards();
-  return boards[id] || null;
+  const localBoard = boards[id];
+
+  // Se o board existia apenas localmente e agora o Supabase está ativo,
+  // faz o upload automático para que fique público para todos!
+  if (localBoard && isSupabaseConfigured && supabase) {
+    try {
+      await supabase.from('boards').upsert({
+        id: localBoard.id,
+        html_content: localBoard.html_content,
+        preview_width: localBoard.preview_width,
+      });
+
+      const localComments = getLocalComments().filter((c) => c.board_id === id);
+      if (localComments.length > 0) {
+        await supabase.from('comments').upsert(
+          localComments.map((c) => ({
+            id: c.id,
+            board_id: c.board_id,
+            author_name: c.author_name,
+            pos_x: c.pos_x,
+            pos_y: c.pos_y,
+            text: c.text,
+          }))
+        );
+      }
+    } catch (syncErr) {
+      console.warn('Falha silenciosa ao sincronizar board local para Supabase:', syncErr);
+    }
+  }
+
+  return localBoard || null;
+}
+
+export async function syncAllLocalBoards(): Promise<void> {
+  if (!isSupabaseConfigured || !supabase) return;
+  try {
+    const boards = getLocalBoards();
+    const list = Object.values(boards);
+    for (const b of list) {
+      await supabase.from('boards').upsert({
+        id: b.id,
+        html_content: b.html_content,
+        preview_width: b.preview_width,
+      });
+    }
+
+    const comments = getLocalComments();
+    if (comments.length > 0) {
+      await supabase.from('comments').upsert(
+        comments.map((c) => ({
+          id: c.id,
+          board_id: c.board_id,
+          author_name: c.author_name,
+          pos_x: c.pos_x,
+          pos_y: c.pos_y,
+          text: c.text,
+        }))
+      );
+    }
+  } catch (err) {
+    console.warn('Erro ao sincronizar boards locais:', err);
+  }
 }
 
 // -------------------------------------------------------------
